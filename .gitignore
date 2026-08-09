@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# data & artifacts
+data/*.jsonl
+outputs/
+mlruns/
+.mlflow/
+checkpoints/
+
+# env & OS
+.env
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/

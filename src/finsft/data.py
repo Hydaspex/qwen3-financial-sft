@@ -92,8 +92,7 @@ def write_jsonl(records: list[dict], path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        for rec in records:
-            f.write(json.dumps(rec) + "\n")
+        f.writelines(json.dumps(rec) + "\n" for rec in records)
 
 
 def read_jsonl(path: str | Path) -> list[dict]:

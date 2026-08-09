@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from finsft.config import ExperimentConfig, load_config
 
@@ -19,5 +20,5 @@ def test_defaults_form_valid_config():
 
 
 def test_invalid_val_fraction_rejected():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ExperimentConfig(data={"val_fraction": 0.9})

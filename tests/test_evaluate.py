@@ -11,7 +11,11 @@ def test_numeric_match_tolerance():
     assert numeric_match("1200", "1200")
     assert numeric_match("1200.5", "1200", rel_tol=1e-3)
     assert not numeric_match("1300", "1200")
-    assert numeric_match("approx 0.2", "20% growth of 0.2")
+    # TAT-QA golds are clean scalars; predictions may carry surrounding text.
+    assert numeric_match("revenue grew 20%", "20")
+    assert numeric_match("approx 0.2 increase", "0.2")
+    # First-token extraction: a gold containing prose parses as its first number.
+    assert not numeric_match("approx 0.2", "20% growth of 0.2")
 
 
 def test_numeric_match_zero_gold():
@@ -25,7 +29,9 @@ def test_span_match_case_insensitive():
 
 
 def test_score_aggregation():
+    # Mixed batch: one numeric pair (match) + one text pair (no numbers).
     metrics = score(["1200", "cloud services"], ["1200", "Cloud Services"])
-    assert metrics["numeric_em"] == 1.0
+    assert metrics["numeric_em"] == 0.5  # text pair has no numbers to compare
     assert metrics["span_match"] == 1.0
+    assert metrics["combined"] == 0.75
     assert metrics["n"] == 2.0

@@ -1,5 +1,7 @@
 # qwen3-financial-sft
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Hydaspex/qwen3-financial-sft/blob/main/notebooks/colab_repro.ipynb)
+
 Portfolio-grade **supervised fine-tuning (SFT)** of an open-weight LLM (**Qwen3-4B-Instruct**) on **financial reasoning** tasks (TAT-QA / FinQA-style numeric QA over financial reports), using **TRL + PEFT (LoRA/QLoRA)** with **MLflow** experiment tracking and an **offline evaluation harness**.
 
 ## Why this project
@@ -15,6 +17,8 @@ Base instruct models are weak at grounded numeric reasoning over hybrid table+te
 
 ```
 configs/                  # Experiment configs (validated by pydantic)
+notebooks/
+  colab_repro.ipynb       # One-click Colab repro (free-tier T4)
 scripts/
   prepare_data.py         # TAT-QA -> data/{train,val}.jsonl (chat format)
   run_eval.py             # Offline eval harness -> MLflow metrics
@@ -38,6 +42,10 @@ python scripts/run_eval.py --config configs/sft_lora_qwen3_4b.yaml \
     --adapter outputs/qwen3-4b-tatqa-lora
 ```
 
+## One-click repro (Colab)
+
+[notebooks/colab_repro.ipynb](notebooks/colab_repro.ipynb) runs the full pipeline — data prep, QLoRA training, base-vs-tuned eval — on a free-tier T4 with quick-run defaults (2k samples, 1 epoch, ~30 min). The trainer auto-detects hardware and falls back to fp16 + sdpa where bf16 / FlashAttention-2 are unavailable.
+
 ## Databricks / MLflow
 
 Set `MLFLOW_TRACKING_URI=databricks` (and `DATABRICKS_HOST` / `DATABRICKS_TOKEN`) to log runs to a Databricks workspace experiment instead of local `./mlruns`. The pipeline is cluster-agnostic: run `train.py` as a job task on a single-node GPU cluster (A10G/A100), artifacts land in the MLflow run.
@@ -55,6 +63,7 @@ Set `MLFLOW_TRACKING_URI=databricks` (and `DATABRICKS_HOST` / `DATABRICKS_TOKEN`
 - **Completion-only loss** (TRL): loss is computed on the assistant turn only — prevents the model from learning to generate questions.
 - **Numeric-tolerance EM**: financial answers are floats; exact string match under-credits correct arithmetic. We parse the first numeric token and compare with relative tolerance, falling back to span match for text answers.
 - **Config-driven**: every hyperparameter lives in one YAML, validated at load time — same pattern as my production Databricks pipelines.
+- **Hardware-aware fallbacks**: bf16 + FlashAttention-2 on modern GPUs; automatic fp16 + sdpa on T4-class hardware so the Colab repro works out of the box.
 
 ## License
 

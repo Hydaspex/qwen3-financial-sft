@@ -19,20 +19,44 @@ from finsft.config import ExperimentConfig, load_config
 from finsft.data import read_jsonl
 
 
+def resolve_attn_implementation(requested: str) -> str:
+    """Fall back to sdpa when FlashAttention-2 is unavailable (e.g. Colab T4)."""
+    if requested == "flash_attention_2":
+        try:
+            import flash_attn  # noqa: F401
+        except ImportError:
+            print("[finsft] flash-attn not installed; falling back to sdpa")
+            return "sdpa"
+    return requested
+
+
+def resolve_precision(bf16_requested: bool) -> tuple[torch.dtype, bool, bool]:
+    """Pick (dtype, bf16, fp16) based on hardware support.
+
+    T4-class GPUs lack bf16; training there runs fp16 instead.
+    """
+    bf16_ok = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    use_bf16 = bf16_requested and bf16_ok
+    use_fp16 = torch.cuda.is_available() and not use_bf16
+    dtype = torch.bfloat16 if use_bf16 else (torch.float16 if use_fp16 else torch.float32)
+    return dtype, use_bf16, use_fp16
+
+
 def build_model_and_tokenizer(cfg: ExperimentConfig):
+    dtype, _, _ = resolve_precision(cfg.trainer.bf16)
     quant = None
     if cfg.model.load_in_4bit:
         quant = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=dtype,
             bnb_4bit_use_double_quant=True,
         )
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model.name_or_path,
         quantization_config=quant,
-        torch_dtype=torch.bfloat16 if cfg.trainer.bf16 else None,
-        attn_implementation=cfg.model.attn_implementation,
+        torch_dtype=dtype,
+        attn_implementation=resolve_attn_implementation(cfg.model.attn_implementation),
         device_map="auto",
     )
     model.config.use_cache = cfg.model.use_cache
@@ -44,6 +68,7 @@ def build_model_and_tokenizer(cfg: ExperimentConfig):
 
 def build_trainer(cfg: ExperimentConfig) -> SFTTrainer:
     model, tokenizer = build_model_and_tokenizer(cfg)
+    _, use_bf16, use_fp16 = resolve_precision(cfg.trainer.bf16)
 
     train_records = read_jsonl(cfg.data.train_path)
     val_records = read_jsonl(cfg.data.val_path)
@@ -67,7 +92,8 @@ def build_trainer(cfg: ExperimentConfig) -> SFTTrainer:
         max_length=cfg.trainer.max_length,
         logging_steps=cfg.trainer.logging_steps,
         save_strategy=cfg.trainer.save_strategy,
-        bf16=cfg.trainer.bf16,
+        bf16=use_bf16,
+        fp16=use_fp16,
         gradient_checkpointing=cfg.trainer.gradient_checkpointing,
         completion_only_loss=True,  # loss on assistant turn only
         seed=cfg.seed,

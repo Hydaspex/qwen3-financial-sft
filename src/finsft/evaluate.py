@@ -53,6 +53,13 @@ def score(predictions: list[str], golds: list[str]) -> dict[str, float]:
     }
 
 
+def _inference_dtype() -> torch.dtype:
+    """bf16 where supported, fp16 on T4-class GPUs, fp32 on CPU."""
+    if torch.cuda.is_available():
+        return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    return torch.float32
+
+
 @torch.inference_mode()
 def generate_answers(
     cfg: ExperimentConfig,
@@ -62,7 +69,7 @@ def generate_answers(
 ) -> list[str]:
     """Generate answers for chat-format records with base model + optional adapter."""
     model = AutoModelForCausalLM.from_pretrained(
-        cfg.model.name_or_path, torch_dtype=torch.bfloat16, device_map="auto"
+        cfg.model.name_or_path, torch_dtype=_inference_dtype(), device_map="auto"
     )
     if adapter_path:
         model = PeftModel.from_pretrained(model, adapter_path)
